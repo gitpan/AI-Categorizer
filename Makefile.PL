@@ -17,10 +17,10 @@ $file = "lib/$file.pm";
     );
   
   if ($path eq '!') {
-    unlink "t/classpath" if -e "t/classpath";
+    unlink "classpath" if -e "classpath";
   } else {
     local *FH;
-    open FH, "> t/classpath" or die "Can't create t/classpath: $!";
+    open FH, "> classpath" or die "Can't create classpath: $!";
     print FH $path;
     close FH;
   }
@@ -47,12 +47,14 @@ WriteMakefile
              },
    'clean' => {FILES => "t/state"},
    'PREREQ_PM' => {
-		   Class::Container => 0.07,
+		   Class::Container => 0.09,
 		   Storable => 0,
 		   Params::Validate => 0.18,
-		   Statistics::Contingency => 0.05,
+		   Statistics::Contingency => 0.06,
 		   Lingua::Stem => 0.50,
+		   File::Spec => 0,
 		  },
+   'PL_FILES' => {},
    %options,
 
    # Recommended: Scalar::Util

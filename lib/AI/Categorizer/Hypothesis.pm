@@ -14,14 +14,9 @@ __PACKAGE__->valid_params
    document_name => {type => SCALAR, optional => 1},
   );
 
-sub all_categories {
-  my $self = shift;
-  return @{$self->{all_categories}};
-}
-
-sub document_name {
-  return shift->{document_name};
-}
+sub all_categories { @{$_[0]->{all_categories}} }
+sub document_name  { $_[0]->{document_name} }
+sub threshold      { $_[0]->{threshold} }
 
 sub best_category {
   my ($self) = @_;
@@ -30,14 +25,14 @@ sub best_category {
 
   my ($best_cat, $best_score) = each %$sc;
   while (my ($key, $val) = each %$sc) {
-    $best_cat = $key if $val > $best_score;
+    ($best_cat, $best_score) = ($key, $val) if $val > $best_score;
   }
   return $best_cat;
 }
 
 sub in_category {
   my ($self, $cat) = @_;
-  return unless exists $self->{scores}{$cat};
+  return '' unless exists $self->{scores}{$cat};
   return $self->{scores}{$cat} > $self->{threshold};
 }
 
@@ -171,7 +166,7 @@ constructor parameter, or C<undef> if none was specified.
 
 =head1 AUTHOR
 
-Ken Williams <kenw@ee.usyd.edu.au>
+Ken Williams <ken@mathforum.org>
 
 =head1 COPYRIGHT
 

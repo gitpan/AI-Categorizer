@@ -62,7 +62,7 @@ sub train {
   $self->{knowledge_set}->finish;
   $self->create_model;    # Creates $self->{model}
   $self->delayed_object_params('hypothesis',
-			       all_categories => [keys %{$self->{model}{cat_prob}}]
+			       all_categories => [map $_->name, $self->categories],
 			      );
 }
 
@@ -239,7 +239,7 @@ Ken Williams, ken@mathforum.org
 
 =head1 COPYRIGHT
 
-Copyright 2000-2002 Ken Williams.  All rights reserved.
+Copyright 2000-2003 Ken Williams.  All rights reserved.
 
 This library is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.

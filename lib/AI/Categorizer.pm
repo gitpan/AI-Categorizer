@@ -1,11 +1,17 @@
 package AI::Categorizer;
-$VERSION = '0.04';
+$VERSION = '0.05';
 
 use strict;
 use Class::Container;
 use base qw(Class::Container);
 use Params::Validate qw(:types);
 use File::Spec;
+use AI::Categorizer::Learner;
+use AI::Categorizer::Document;
+use AI::Categorizer::Category;
+use AI::Categorizer::Collection;
+use AI::Categorizer::Hypothesis;
+
 
 __PACKAGE__->valid_params
   (
@@ -47,10 +53,15 @@ sub new {
       $args{stopwords}{$_} = 1;
     }
     close FH;
-    delete $args{stopword_file};
   }
 
   return $package->SUPER::new(%defaults, %args);
+}
+
+sub dump_parameters {
+  my $p = shift()->SUPER::dump_parameters;
+  delete $p->{stopwords} if $p->{stopword_file};
+  return $p;
 }
 
 sub knowledge_set { shift->{knowledge_set} }
@@ -68,13 +79,15 @@ sub run_experiment {
 
 sub scan_features {
   my $self = shift;
+  return unless $self->knowledge_set->scan_first;
   $self->knowledge_set->scan_features( path => $self->{training_set} );
   $self->knowledge_set->save_features( "$self->{progress_file}-01-features" );
 }
 
 sub read_training_set {
   my $self = shift;
-  $self->knowledge_set->restore_features( "$self->{progress_file}-01-features" );
+  $self->knowledge_set->restore_features( "$self->{progress_file}-01-features" )
+    if -e "$self->{progress_file}-01-features";
   $self->knowledge_set->read( path => $self->{training_set} );
   $self->_save_progress( '02', 'knowledge_set' );
   return $self->knowledge_set;
@@ -105,6 +118,10 @@ sub stats_table {
 
 sub progress_file {
   shift->{progress_file};
+}
+
+sub verbose {
+  shift->{verbose};
 }
 
 sub _save_progress {
@@ -493,7 +510,11 @@ about each other or use conflicting namespaces.
 
 =head1 AUTHOR
 
-Ken Williams <kenw@ee.usyd.edu.au>
+Ken Williams <ken@mathforum.org>
+
+Discussion about this module can be directed to the perl-AI list at
+<perl-ai@perl.org>.  For more info about the list, see
+http://lists.perl.org/showlist.cgi?name=perl-ai
 
 =head1 REFERENCES
 
@@ -504,7 +525,7 @@ pp. 1-47.
 
 =head1 COPYRIGHT
 
-Copyright 2000-2002 Ken Williams.  All rights reserved.
+Copyright 2000-2003 Ken Williams.  All rights reserved.
 
 This distribution is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.  These terms apply to

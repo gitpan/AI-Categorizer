@@ -21,17 +21,27 @@ sub as_hash {
   return $self->{features};
 }
 
-sub normalize {
+sub euclidean_length {
   my $self = shift;
+  my $f = $self->{features};
+
   my $total = 0;
-  local $_;
-  while ( (undef, $_) = each %{ $self->{features} } ) {
+  foreach (values %$f) {
     $total += $_**2;
   }
-  $total = sqrt($total);
-  foreach ( %{ $self->{features} } ) {
-    $_ /= $total;
-  }
+  return sqrt($total);
+}
+
+sub normalize {
+  my $self = shift;
+
+  my $length = $self->euclidean_length;
+  return $length ? $self->scale(1/$length) : $self;
+}
+
+sub scale {
+  my ($self, $scalar) = @_;
+  $_ *= $scalar foreach values %{$self->{features}};
   return $self;
 }
 
@@ -78,8 +88,8 @@ sub dot {
 
   my $sum = 0;
   my $f = $self->{features};
-  while (my ($k, $v) = each %$other) {
-    $sum += $f->{$k} * $v if exists $f->{$k};
+  while (my ($k, $v) = each %$f) {
+    $sum += $other->{$k} * $v if exists $other->{$k};
   }
   return $sum;
 }
@@ -99,6 +109,11 @@ sub includes {
 
 sub value {
   return $_[0]->{features}{$_[1]};
+}
+
+sub values {
+  my $self = shift;
+  return @{ $self->{features} }{ @_ };
 }
 
 1;
@@ -156,7 +171,7 @@ Ken Williams, ken@mathforum.org
 
 =head1 COPYRIGHT
 
-Copyright 2000-2002 Ken Williams.  All rights reserved.
+Copyright 2000-2003 Ken Williams.  All rights reserved.
 
 This library is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.

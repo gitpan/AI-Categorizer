@@ -41,6 +41,8 @@ sub create_model {
   }
 }
 
+sub create_boolean_model;  # Abstract method
+
 sub get_scores {
   my ($self, $doc) = @_;
   my $m = $self->{model};
@@ -50,6 +52,8 @@ sub get_scores {
   }
   return (\%scores, $self->{threshold});
 }
+
+sub get_boolean_score;  # Abstract method
 
 sub threshold {
   my $self = shift;
@@ -71,7 +75,9 @@ AI::Categorizer::Learner::Boolean - Abstract class for boolean categorizers
 
 =head1 SYNOPSIS
 
+ package AI::Categorizer::Learner::SomethingNew;
  use AI::Categorizer::Learner::Boolean;
+ @ISA = qw(AI::Categorizer::Learner::Boolean);
  
  sub create_boolean_model {
    my ($self, $positives, $negatives, $category) = @_;

@@ -37,8 +37,6 @@ sub _doc_2_dataset {
 
 sub create_boolean_model {
   my ($self, $positives, $negatives, $cat) = @_;
-  warn "Creating model for category ", $cat->name, "\n" if $self->verbose;
-  
   my $svm = new Algorithm::SVM(Kernel => $self->{svm_kernel});
   
   my (@pos, @neg);
@@ -175,7 +173,7 @@ Ken Williams, ken@mathforum.org
 
 =head1 COPYRIGHT
 
-Copyright 2000-2002 Ken Williams.  All rights reserved.
+Copyright 2000-2003 Ken Williams.  All rights reserved.
 
 This library is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.

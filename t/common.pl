@@ -43,7 +43,11 @@ sub run_test_docs {
   my $r = $l->categorize($doc);
   
   print "Categories: ", join(', ', $r->categories), "\n";
-  ok($r->best_category, 'farming');
+  ok($r->best_category, 'farming', "Best category is 'farming'");
+  ok $r->in_category('farming'),  1, sprintf("threshold = %s, score = %s", $r->threshold, $r->scores('farming'));
+  ok $r->in_category('vampire'), '', sprintf("threshold = %s, score = %s", $r->threshold, $r->scores('vampire'));
+  
+  ok $r->all_categories, 2, "Should be 2 categories in total";
   
   $doc = new AI::Categorizer::Document
     ( name => 'test2',
@@ -51,21 +55,23 @@ sub run_test_docs {
   $r = $l->categorize($doc);
   
   print "Categories: ", join(', ', $r->categories), "\n";
-  ok($r->best_category, 'vampire');
-
+  ok($r->best_category, 'vampire', "Best category is 'vampire'");
+  ok $r->in_category('farming'), '', sprintf("threshold = %s, score = %s", $r->threshold, $r->scores('farming'));
+  ok $r->in_category('vampire'),  1, sprintf("threshold = %s, score = %s", $r->threshold, $r->scores('vampire'));
 }
 
-sub perform_standard_tests {
+sub set_up_tests {
   my %params = @_;
   my $c = new AI::Categorizer(
 			      knowledge_set => AI::Categorizer::KnowledgeSet->new
 			      (
 			       name => 'Vampires/Farmers',
 			       stopwords => [qw(are be in of and)],
-			      ), 
+			      ),
+			      verbose => $ENV{TEST_VERBOSE} ? 1 : 0,
 			      %params,
 			     );
-  ok($c);
+  ok ref($c), 'AI::Categorizer', "Create an AI::Categorizer object";
   
   my %docs = training_docs();
   while (my ($name, $data) = each %docs) {
@@ -76,12 +82,17 @@ sub perform_standard_tests {
   ok $l;
   
   if ($params{learner_class}) {
-    ok ref $l, $params{learner_class};
+    ok ref($l), $params{learner_class}, "Make sure the correct Learner class is instantiated";
   } else {
-    ok 1;
+    ok 1, 1, "Dummy test";
   }
 
   $l->train;
+  return ($l, \%docs);
+}
+
+sub perform_standard_tests {
+  my ($l, $docs) = set_up_tests(@_);
   
   run_test_docs($l);
 
@@ -92,13 +103,14 @@ sub perform_standard_tests {
 
   run_test_docs($l);
 
-  my $train_collection = AI::Categorizer::Collection::InMemory->new(data => \%docs);
+  my $train_collection = AI::Categorizer::Collection::InMemory->new(data => $docs);
   ok $train_collection;
   
   my $h = $l->categorize_collection(collection => $train_collection);
   ok $h->micro_precision > 0.5;
 }
 
-sub num_standard_tests () { 10 }
+sub num_setup_tests    () { 3 }
+sub num_standard_tests () { num_setup_tests + 17 }
 
 1;

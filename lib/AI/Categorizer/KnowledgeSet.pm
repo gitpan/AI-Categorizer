@@ -29,14 +29,13 @@ __PACKAGE__->valid_params
 				 sub { ! grep !UNIVERSAL::isa($_, 'AI::Categorizer::Document'), @_ },
 			       },
 		 },
-   features_kept => {
-		     type => SCALAR,
-		     default => 0.2,
-		    },
-   feature_selection => {
-			 type => SCALAR,
-			 default => 'document_frequency',
-			},
+   scan_first => {
+		  type => BOOLEAN,
+		  default => 1,
+		 },
+   feature_selector => {
+			isa => 'AI::Categorizer::FeatureSelector',
+		       },
    tfidf_weighting  => {
 			type => SCALAR,
 			optional => 1,
@@ -69,6 +68,7 @@ __PACKAGE__->contained_objects
 		   class => 'AI::Categorizer::Collection::Files' },
    features => { delayed => 1,
 		 class => 'AI::Categorizer::FeatureVector' },
+   feature_selector => 'AI::Categorizer::FeatureSelector::DocFrequency',
   );
 
 sub new {
@@ -78,6 +78,11 @@ sub new {
   if ($args{tfidf_weighting}) {
     @args{'term_weighting', 'collection_weighting', 'normalize_weighting'} = split '', $args{tfidf_weighting};
     delete $args{tfidf_weighting};
+  }
+
+  # Optimize so every document doesn't have to convert the stopword list to a hash
+  if ($args{stopwords} and UNIVERSAL::isa($args{stopwords}, 'ARRAY')) {
+    $args{stopwords} = { map {+$_ => 1} @{ $args{stopwords} } };
   }
 
   my $self = $pkg->SUPER::new(%args);
@@ -104,7 +109,7 @@ sub features {
   return $self->{features} if $self->{features};
 
   # Create a feature vector encompassing the whole set of documents
-  my $v = $self->create_delayed_object('features', features => {});
+  my $v = $self->create_delayed_object('features');
   foreach my $document ($self->documents) {
     $v->add( $document->features );
   }
@@ -125,6 +130,9 @@ sub document {
   my ($self, $name) = @_;
   return $self->{documents}->retrieve($name);
 }
+
+sub feature_selector { $_[0]->{feature_selector} }
+sub scan_first       { $_[0]->{scan_first} }
 
 sub verbose {
   my $self = shift;
@@ -148,7 +156,7 @@ sub prog_bar {
   return sub { print STDERR '.' } unless eval "use Time::Progress; 1";
 
   my $count = $collection->can('count_documents') ? $collection->count_documents : 0;
-
+  
   my $pb = 'Time::Progress'->new;
   $pb->attr(max => $count);
   my $i = 0;
@@ -157,6 +165,13 @@ sub prog_bar {
     return if $i % 25;
     print STDERR $pb->report("%50b %p ($i/$count)\r", $i);
   };
+}
+
+# A little utility method for several other methods like scan_stats(),
+# load(), read(), etc.
+sub _make_collection {
+  my ($self, $args) = @_;
+  return $args->{collection} || $self->create_delayed_object('collection', %$args);
 }
 
 sub scan_stats {
@@ -170,7 +185,7 @@ sub scan_stats {
   #  - "category skew index" (% variance?) by num. documents, tokens, and types
 
   my ($self, %args) = @_;
-  my $collection = $args{collection} ? $args{collection} : $self->create_delayed_object('collection', %args);
+  my $collection = $self->_make_collection(\%args);
   my $pb = $self->prog_bar($collection);
 
   my %stats;
@@ -220,19 +235,18 @@ sub scan_stats {
 
 sub load {
   my ($self, %args) = @_;
-  my $c = $args{collection} ? $args{collection} 
-          : $self->create_delayed_object('collection', path => $args{path});
+  my $c = $self->_make_collection(\%args);
 
-  if ($args{scan_features}) {
+  if ($self->{scan_first}) {
     # Figure out the feature set first, then read data in
     $self->scan_features( collection => $c );
     $c->rewind;
     $self->read( collection => $c );
 
-  } elsif (my $fk = exists($args{features_kept}) ? $args{features_kept} : $self->{features_kept}) {
+  } elsif ($self->{features_kept}) {
     # Read the whole thing in, then reduce
     $self->read( collection => $c );
-    $self->select_features( features_kept => $fk );
+    $self->select_features;
 
   } else {
     # Don't do any feature reduction, just read the data
@@ -242,9 +256,9 @@ sub load {
 
 sub read {
   my ($self, %args) = @_;
-  my $collection = $args{collection} ? $args{collection} : $self->create_delayed_object('collection', %args);
+  my $collection = $self->_make_collection(\%args);
   my $pb = $self->prog_bar($collection);
-
+  
   while (my $doc = $collection->next) {
     $pb->();
     $self->add_document($doc);
@@ -327,70 +341,20 @@ sub document_frequency {
 
 sub scan_features {
   my ($self, %args) = @_;
-  my $c = $args{collection} ? $args{collection} : $self->create_delayed_object('collection', %args);
+  my $c = $self->_make_collection(\%args);
 
-  my $ranked_features;
+  my $pb = $self->prog_bar($c);
+  my $ranked_features = $self->{feature_selector}->scan_features( collection => $c, prog_bar => $pb );
 
-  if ($self->{feature_selection} eq 'document_frequency') {
-    my $doc_freq   = $self->create_delayed_object('features', features => {});
-    my $pb = $self->prog_bar($c);
-    
-    while (my $doc = $c->next) {
-      $pb->();
-      $doc_freq->add( $doc->features->as_boolean_hash );
-    }
-    print "\n" if $self->verbose;
-    
-    $ranked_features = $self->_reduce_features($doc_freq);
-    $self->{doc_freq_vector} = $ranked_features->as_hash;
-  } else {
-    die "Unknown feature_selection type '$self->{feature_selection}'";
-  }
-  
   $self->delayed_object_params('document', use_features => $ranked_features);
   $self->delayed_object_params('collection', use_features => $ranked_features);
   return $ranked_features;
 }
 
-sub _reduce_features {
-  # Takes a feature vector whose weights are "feature scores", and
-  # chops to the highest n features.  n is specified by the
-  # 'features_kept' parameter.  If it's zero, all features are kept.
-  # If it's between 0 and 1, we multiply by the present number of
-  # features.  If it's greater than 1, we treat it as the number of
-  # features to use.
-
-  my ($self, $f, $kept) = @_;
-  $kept ||= $self->{features_kept};
-  return $f unless $kept;
-
-  my $num_kept = ($kept < 1 ? 
-		  $f->length * $kept :
-		  $kept);
-
-  print "Trimming features - # features = " . $f->length . "\n" if $self->{verbose};
-  
-  # This is algorithmic overkill, but the sort seems fast enough.  Will revisit later.
-  my $features = $f->as_hash;
-  my @new_features = (sort {$features->{$b} <=> $features->{$a}} keys %$features)
-                      [0 .. $num_kept-1];
-
-  my $result = $f->intersection( \@new_features );
-  print "Finished trimming features - # features = " . $result->length . "\n" if $self->{verbose};
-  return $result;
-}
-
-
 sub select_features {
-  # This just uses a simple document-frequency criterion, controlled
-  # by 'features_kept'.  Other algorithms may follow later, controlled
-  # by other parameters.
-
-# XXX this is doing word-frequency right now, not document-frequency
-
-  my ($self, %args) = @_;
+  my $self = shift;
   
-  my $f = $self->_reduce_features($self->features, $args{features_kept});
+  my $f = $self->feature_selector->select_features(knowledge_set => $self);
   $self->features($f);
 }
 
@@ -691,7 +655,7 @@ method of the Collection class.
 =item load()
 
 This method can do feature selection and load a Collection in one step
-(though it currently uses two steps internally).
+(though it currently uses two steps internally).  
 
 =item add_document()
 
@@ -740,7 +704,7 @@ Ken Williams, ken@mathforum.org
 
 =head1 COPYRIGHT
 
-Copyright 2000-2002 Ken Williams.  All rights reserved.
+Copyright 2000-2003 Ken Williams.  All rights reserved.
 
 This library is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.
@@ -750,15 +714,3 @@ modify it under the same terms as Perl itself.
 AI::Categorizer(3)
 
 =cut
-
-
-
-=item term_weighting
-
-Specifies how word counts should be converted to feature vector
-values.  If C<term_weighting> is set to C<natural>, the word counts
-themselves will be used as the values.  C<boolean> indicates that each
-positive word count will be converted to 1 (or whatever the
-C<content_weight> for this section is).  C<log> indicates that the
-values will be set to C<1+log(count)>.
-

@@ -23,12 +23,24 @@ __PACKAGE__->valid_params
 		 },
    stopwords => {
 		 type => ARRAYREF|HASHREF,
-		 default => []
+		 default => {},
 		},
    content   => {
 		 type => HASHREF|SCALAR,
-		 default => '',
+		 default => undef,
 		},
+   parse => {
+	     type => SCALAR,
+	     optional => 1,
+	    },
+   parse_handle => {
+		    type => HANDLE,
+		    optional => 1,
+		   },
+   features => {
+		isa => 'AI::Categorizer::FeatureVector',
+		optional => 1,
+	       },
    content_weights => {
 		       type => HASHREF,
 		       default => {},
@@ -45,6 +57,10 @@ __PACKAGE__->valid_params
 		type => SCALAR|UNDEF,
 		optional => 1,
 	       },
+   stopword_behavior => {
+			 type => SCALAR,
+			 default => "stem",
+			},
   );
 
 __PACKAGE__->contained_objects
@@ -55,31 +71,81 @@ __PACKAGE__->contained_objects
 
 ### Constructors
 
+my $NAME = 'a';
+
 sub new {
-  my $self = shift()->SUPER::new(@_);
+  my $pkg = shift;
+  my $self = $pkg->SUPER::new(name => $NAME++,  # Use a default name
+			      @_);
 
   # Get efficient internal data structures
   $self->{categories} = new AI::Categorizer::ObjectSet( @{$self->{categories}} );
-  $self->{stopwords} = { map {($_ => 1)} @{ $self->{stopwords} } }
-    if UNIVERSAL::isa($self->{stopwords}, 'ARRAY');
 
-  # Allow a simple string as the content
-  $self->{content} = { body => $self->{content} } unless ref($self->{content});
-
-  $self->create_feature_vector;
-
-  # Now we're done with all the content stuff
-  delete @{$self}{'content', 'content_weights', 'stopwords', 'use_features'};
+  $self->_fix_stopwords;
   
+  # A few different ways for the caller to initialize the content
+  if (exists $self->{parse}) {
+    $self->parse(content => delete $self->{parse});
+    
+  } elsif (exists $self->{parse_handle}) {
+    $self->parse_handle(handle => delete $self->{parse_handle});
+    
+  } elsif (defined $self->{content}) {
+    # Allow a simple string as the content
+    $self->{content} = { body => $self->{content} } unless ref $self->{content};
+  }
+  
+  $self->finish if $self->{content};
   return $self;
 }
+
+sub _fix_stopwords {
+  my $self = shift;
+  
+  # Convert to hash
+  $self->{stopwords} = { map {($_ => 1)} @{ $self->{stopwords} } }
+    if UNIVERSAL::isa($self->{stopwords}, 'ARRAY');
+  
+  my $s = $self->{stopwords};
+
+  # May need to perform stemming on the stopwords
+  return unless keys %$s; # No point in doing anything if there are no stopwords
+  return unless $self->{stopword_behavior} eq 'stem';
+  return if !defined($self->{stemming}) or $self->{stemming} eq 'none';
+  return if $s->{___stemmed};
+  
+  my @keys = keys %$s;
+  %$s = ();
+  $self->stem_words(\@keys);
+  $s->{$_} = 1 foreach @keys;
+  
+  # This flag is attached to the stopword structure itself so that
+  # other documents will notice it.
+  $s->{___stemmed} = 1;
+}
+
+sub finish {
+  my $self = shift;
+  $self->create_feature_vector;
+  
+  # Now we're done with all the content stuff
+  delete @{$self}{'content', 'content_weights', 'stopwords', 'use_features'};
+}
+
 
 # Parse a document format - a virtual method
 sub parse;
 
+sub parse_handle {
+  my ($self, %args) = @_;
+  my $fh = $args{handle} or die "No 'handle' argument given to parse_handle()";
+  return $self->parse( content => join '', <$fh> );
+}
+
 ### Accessors
 
 sub name { $_[0]->{name} }
+sub stopword_behavior { $_[0]->{stopword_behavior} }
 
 sub features {
   my $self = shift;
@@ -102,10 +168,15 @@ sub create_feature_vector {
   my $content = $self->{content};
   my $weights = $self->{content_weights};
 
+  die "'stopword_behavior' must be one of 'stem', 'no_stem', or 'pre_stemmed'"
+    unless $self->{stopword_behavior} =~ /^stem|no_stem|pre_stemmed$/;
+
   $self->{features} = $self->create_delayed_object('features');
   while (my ($name, $data) = each %$content) {
     my $t = $self->tokenize($data);
+    $t = $self->_filter_tokens($t) if $self->{stopword_behavior} eq 'no_stem';
     $self->stem_words($t);
+    $t = $self->_filter_tokens($t) if $self->{stopword_behavior} =~ /^stem|pre_stemmed$/;
     my $h = $self->vectorize(tokens => $t, weight => exists($weights->{$name}) ? $weights->{$name} : 1 );
     $self->{features}->add($h);
   }
@@ -149,7 +220,7 @@ sub _filter_tokens {
   if ($self->{use_features}) {
     my $f = $self->{use_features}->as_hash;
     return [ grep  exists($f->{$_}), @$tokens_in ];
-  } elsif ($self->{stopwords}) {
+  } elsif ($self->{stopwords} and keys %{$self->{stopwords}}) {
     my $s = $self->{stopwords};
     return [ grep !exists($s->{$_}), @$tokens_in ];
   }
@@ -185,22 +256,36 @@ sub _weigh_tokens {
 
 sub vectorize {
   my ($self, %args) = @_;
-  my $tokens = $self->_filter_tokens($args{tokens});
-  return $self->_weigh_tokens($tokens, $args{weight});
+  if ($self->{stem_stopwords}) {
+    my $s = $self->stem_tokens([keys %{$self->{stopwords}}]);
+    $self->{stopwords} = { map {+$_, 1} @$s };
+    $args{tokens} = $self->_filter_tokens($args{tokens});
+  }
+  return $self->_weigh_tokens($args{tokens}, $args{weight});
 }
 
 sub read {
   my ($class, %args) = @_;
   my $path = delete $args{path} or die "Must specify 'path' argument to read()";
-  $args{name} ||= $path;
+  
+  my $self = $class->new(%args);
+  
+  open my($fh), "< $path" or die "$path: $!";
+  $self->parse_handle(handle => $fh);
+  close $fh;
+  
+  $self->finish;
+  return $self;
+}
 
-  local *FH;
-  open FH, "< $path" or die "$path: $!";
-  my $body = do {local $/; <FH>};
-  close FH;
-
-  my $doc = $class->parse(content => $body);
-  return $class->new(%args, content => $doc);
+sub dump_features {
+  my ($self, %args) = @_;
+  my $path = $args{path} or die "No 'path' argument given to dump_features()";
+  open my($fh), "> $path" or die "Can't create $path: $!";
+  my $f = $self->features->as_hash;
+  while (my ($k, $v) = each %$f) {
+    print $fh "$k\t$v\n";
+  }
 }
 
 1;
@@ -322,12 +407,54 @@ C<porter>, indicating that the Porter stemming algorithm should be
 applied to each token.  This requires the C<Lingua::Stem> module from
 CPAN.
 
+=item stopword_behavior
+
+There are a few ways you might want the stopword list (specified with
+the C<stopwords> parameter) to interact with the stemming algorithm
+(specified with the C<stemming> parameter).  These options can be
+controlled with the C<stopword_behavior> parameter, which can take the
+following values:
+
+=over 4
+
+=item no_stem
+
+Match stopwords against non-stemmed document words.  
+
+=item stem
+
+Stem stopwords according to 'stemming' parameter, then match them
+against stemmed document words.
+
+=item pre_stemmed
+
+Stopwords are already stemmed, match them against stemmed document
+words.
+
+=back
+
+The default value is C<stem>, which seems to produce the best results
+in most cases I've tried.  I'm not aware of any studies comparing the
+C<no_stem> behavior to the C<stem> behavior in the general case.
+
+This parameter has no effect if there are no stopwords being used, or
+if stemming is not being used.  In the latter case, the list of
+stopwords will always be matched as-is against the document words.
+
+Note that if the C<stem> option is used, the data structure passed as
+the C<stopwords> parameter will be modified in-place to contain the
+stemmed versions of the stopwords supplied.
+
 =back
 
 =item read( path =E<gt> $path )
 
 An alternative constructor method which reads a file on disk and
 returns a document with that file's contents.
+
+=item parse( content =E<gt> $content )
+
+
 
 =item name()
 
@@ -355,7 +482,7 @@ won't call this method directly, it's called by C<new()>.
 
 =head1 AUTHOR
 
-Ken Williams <kenw@ee.usyd.edu.au>
+Ken Williams <ken@mathforum.org>
 
 =head1 COPYRIGHT
 

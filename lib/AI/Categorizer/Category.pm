@@ -63,17 +63,20 @@ sub add_document {
 
 sub features {
   my $self = shift;
-  return $self->{features} if exists $self->{features};
 
-  my @docs = $self->documents
-    or return $self->{features} = $self->create_delayed_object('features', features => {});
-
-  my $sum = (shift @docs)->features->clone;
-  while (@docs) {
-    $sum->add((shift @docs)->features);
+  if (@_) {
+    $self->{features} = shift;
   }
+  return $self->{features} if $self->{features};
 
-  return $self->{features} = $sum;
+  my $v = $self->create_delayed_object('features');
+  return $self->{features} = $v unless $self->documents;
+
+  foreach my $document ($self->documents) {
+    $v->add( $document->features );
+  }
+  
+  return $self->{features} = $v;
 }
 
 1;
@@ -155,7 +158,7 @@ Ken Williams, ken@mathforum.org
 
 =head1 COPYRIGHT
 
-Copyright 2000-2002 Ken Williams.  All rights reserved.
+Copyright 2000-2003 Ken Williams.  All rights reserved.
 
 This library is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.

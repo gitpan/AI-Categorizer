@@ -315,7 +315,11 @@ HISTORY
     or use conflicting namespaces.
 
 AUTHOR
-    Ken Williams <kenw@ee.usyd.edu.au>
+    Ken Williams <ken@mathforum.org>
+
+    Discussion about this module can be directed to the perl-AI list at
+    <perl-ai@perl.org>. For more info about the list, see
+    http://lists.perl.org/showlist.cgi?name=perl-ai
 
 REFERENCES
     An excellent introduction to the academic field of Text Categorization is
@@ -323,7 +327,7 @@ REFERENCES
     ACM Computing Surveys, Vol. 34, No. 1, March 2002, pp. 1-47.
 
 COPYRIGHT
-    Copyright 2000-2002 Ken Williams. All rights reserved.
+    Copyright 2000-2003 Ken Williams. All rights reserved.
 
     This distribution is free software; you can redistribute it and/or modify it
     under the same terms as Perl itself. These terms apply to every file in the
