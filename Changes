@@ -1,5 +1,11 @@
 Revision history for Perl extension AI::Categorizer.
 
+0.07  Tue May  6 16:15:04 CDT 2003
+
+ - Oops - eg/demo.pl and t/15-knowledge_set.t didn't make it into the
+   MANIFEST, so they weren't included in the 0.06 distribution.
+   [Spotted by Zoltan Barta]
+
 0.06 Tue Apr 22 10:27:26 CDT 2003
 
  - Added a relatively simple example script at the request of several
@@ -15,6 +21,9 @@ Revision history for Perl extension AI::Categorizer.
    the KnowledgeSet objects were never accepted, claiming that it
    failed the "All are Document objects" or "All are Category objects"
    callbacks. [Spotted by rob@phraud.org]
+
+ - Moved the 'stopword_file' parameter from Categorizer.pm to the
+   Collection class.
 
 0.05  Sat Mar 29 00:38:21 CST 2003
 
