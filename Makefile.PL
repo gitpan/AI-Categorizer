@@ -1,11 +1,38 @@
 
 use ExtUtils::MakeMaker;
+use Config;
 
 my $module = 'AI::Categorizer';
 my ($file, $dir);
 ($dir  = $module) =~ s/::/-/g;
 ($file = $module) =~ s{::}{/}g;
 $file = "lib/$file.pm";
+
+{
+  my $path = prompt
+    (
+     "\nIf you have the Weka system installed, please specify the path\n".
+     "to the 'weka.jar' file, or '-' to search CLASSPATH, or '!' to skip:",
+     '!'
+    );
+  
+  if ($path eq '!') {
+    unlink "t/classpath" if -e "t/classpath";
+  } else {
+    local *FH;
+    open FH, "> t/classpath" or die "Can't create t/classpath: $!";
+    print FH $path;
+    close FH;
+  }
+}
+
+my %options;
+{
+  if (prompt("Do you want to install the command-line script 'categorizer' to $Config::Config{installscript}?", 'n') =~ /^y/i) {
+    $options{EXE_FILES} = [qw(eg/categorizer)];
+  }
+}
+
 
 WriteMakefile
   (
@@ -18,14 +45,15 @@ WriteMakefile
                        "cp -f README $dir-\$(VERSION); "
                       ),
              },
-   # 'clean' => {FILES => "t/httpd.conf t/error_log t/httpd"},
+   'clean' => {FILES => "t/state"},
    'PREREQ_PM' => {
 		   Class::Container => 0.07,
 		   Storable => 0,
 		   Params::Validate => 0.18,
-		   Statistics::Contingency => 0.01,
+		   Statistics::Contingency => 0.05,
 		   Lingua::Stem => 0.50,
 		  },
+   %options,
 
    # Recommended: Scalar::Util
 

@@ -68,7 +68,7 @@ sub get_scores {
   }
 
   $self->_rescale(\%scores);
-  return \%scores;
+  return (\%scores, $self->{threshold});
 }
 
 sub _rescale {
@@ -91,26 +91,6 @@ sub threshold {
   my $self = shift;
   $self->{threshold} = shift if @_;
   return $self->{threshold};
-}
-
-sub categorize {
-  my ($self, $doc) = @_;
-
-  my $scores = $self->get_scores($doc);
-  
-  if ($self->verbose > 2) {
-    warn "scores: @{[ %$scores ]}" if $self->verbose > 3;
-
-    foreach my $key (sort {$scores->{$b} <=> $scores->{$a}} keys %$scores) {
-      print "$key: $scores->{$key}\n";
-    }
-  }
-
-  return $self->create_delayed_object('hypothesis',
-				      scores => $scores,
-				      threshold => $self->{threshold},
-				      document_name => $doc->name,
-				     );
 }
 
 sub save_state {
@@ -295,14 +275,14 @@ Ken Williams, ken@forum.swarthmore.edu
 
 =head1 COPYRIGHT
 
-Copyright 2000-2001 Ken Williams.  All rights reserved.
+Copyright 2000-2002 Ken Williams.  All rights reserved.
 
 This library is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.
 
 =head1 SEE ALSO
 
-AI::Categorize(3)
+AI::Categorizer(3)
 
 "A re-examination of text categorization methods" by Yiming Yang
 L<http://www.cs.cmu.edu/~yiming/publications.html>

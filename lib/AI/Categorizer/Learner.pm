@@ -27,8 +27,11 @@ __PACKAGE__->contained_objects
   );
 
 # Subclasses must override these virtual methods:
-sub categorize;
+sub get_scores;
 sub create_model;
+
+# Optional virtual method for on-line learning:
+sub add_knowledge;
 
 sub verbose {
   my $self = shift;
@@ -46,11 +49,17 @@ sub knowledge_set {
   return $self->{knowledge_set};
 }
 
+sub categories {
+  my $self = shift;
+  return $self->knowledge_set->categories;
+}
+
 sub train {
   my ($self, %args) = @_;
   $self->{knowledge_set} = $args{knowledge_set} if $args{knowledge_set};
   die "No knowledge_set provided" unless $self->{knowledge_set};
 
+  $self->{knowledge_set}->finish;
   $self->create_model;    # Creates $self->{model}
   $self->delayed_object_params('hypothesis',
 			       all_categories => [keys %{$self->{model}{cat_prob}}]
@@ -71,7 +80,7 @@ sub prog_bar {
     my $string = '';
     if (@_) {
       my $e = shift;
-      $string = sprintf " (miF1=%.03f, maF1=%.03f)", $e->micro_F1, $e->macro_F1;
+      $string = sprintf " (maF1=%.03f, miF1=%.03f)", $e->macro_F1, $e->micro_F1;
     }
     print STDERR $pb->report("%50b %p ($i/$count)$string\r", $i);
     return $i;
@@ -81,16 +90,19 @@ sub prog_bar {
 sub categorize_collection {
   my ($self, %args) = @_;
   my $c = $args{collection} or die "No collection provided";
-  
+
   my @all_cats = map $_->name, $self->categories;
   my $experiment = $self->create_delayed_object('experiment', categories => \@all_cats);
-  my $pb = $self->verbose == 1 ? $self->prog_bar($c->count_documents) : sub {};
+  my $pb = $self->verbose ? $self->prog_bar($c->count_documents) : sub {};
   while (my $d = $c->next) {
     my $h = $self->categorize($d);
-    $experiment->add_result([$h->categories], [map $_->name, $d->categories], $d->name);
+    $experiment->add_hypothesis($h, [map $_->name, $d->categories]);
     $pb->($experiment);
     if ($self->verbose > 1) {
-      printf STDERR "%s: assigned=(%s) correct=(%s)\n", $d->name, join(', ', $h->categories), join(', ', map $_->name, $d->categories);
+      printf STDERR ("%s: assigned=(%s) correct=(%s)\n",
+		     $d->name,
+		     join(', ', $h->categories),
+		     join(', ', map $_->name, $d->categories));
     }
   }
   print STDERR "\n" if $self->verbose;
@@ -98,6 +110,25 @@ sub categorize_collection {
   return $experiment;
 }
 
+sub categorize {
+  my ($self, $doc) = @_;
+  
+  my ($scores, $threshold) = $self->get_scores($doc);
+  
+  if ($self->verbose > 2) {
+    warn "scores: @{[ %$scores ]}" if $self->verbose > 3;
+    
+    foreach my $key (sort {$scores->{$b} <=> $scores->{$a}} keys %$scores) {
+      print "$key: $scores->{$key}\n";
+    }
+  }
+  
+  return $self->create_delayed_object('hypothesis',
+                                      scores => $scores,
+                                      threshold => $threshold,
+                                      document_name => $doc->name,
+                                     );
+}
 1;
 
 __END__
@@ -180,7 +211,9 @@ details on how to use this object.
 =item categorize_collection(collection => $collection)
 
 Categorizes every document in a collection and returns an Experiment
-object representing the results.
+object representing the results.  Note that the Experiment does not
+contain knowledge of the assigned categories for every document, only
+a statistical summary of the results.
 
 =item knowledge_set()
 
@@ -202,17 +235,17 @@ is inherited from C<AI::Categorizer::Storable>.
 
 =head1 AUTHOR
 
-Ken Williams, ken@forum.swarthmore.edu
+Ken Williams, ken@mathforum.org
 
 =head1 COPYRIGHT
 
-Copyright 2000-2001 Ken Williams.  All rights reserved.
+Copyright 2000-2002 Ken Williams.  All rights reserved.
 
 This library is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.
 
 =head1 SEE ALSO
 
-AI::Categorize(3)
+AI::Categorizer(3)
 
 =cut

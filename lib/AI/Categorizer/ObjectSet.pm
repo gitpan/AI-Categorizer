@@ -4,7 +4,7 @@ use strict;
 sub new {
   my $pkg = shift;
   my $self = bless {}, $pkg;
-  $self->insert(@_);
+  $self->insert(@_) if @_;
   return $self;
 }
 
@@ -24,6 +24,9 @@ sub insert {
   }
 }
 
+sub retrieve { $_[0]->{$_[1]} }
 
+sub includes { exists $_[0]->{ $_[1]->name } }
+sub includes_name  { exists $_[0]->{ $_[1] } }
 
 1;

@@ -12,12 +12,6 @@ __PACKAGE__->valid_params
    verbose => { type => BOOLEAN, default => 0 },
   );
 
-__PACKAGE__->contained_objects
-  (
-   document => { class => 'AI::Categorizer::Document::Text',
-		 delayed => 1 },
-  );
-
 sub new {
   my $class = shift;
   my $self = $class->SUPER::new(@_);
@@ -56,6 +50,7 @@ sub next {
     return $self->next;
   }
 
+  warn "No category information about '$file'" unless defined $self->{category_hash}{$file};
   my @cats = map AI::Categorizer::Category->by_name(name => $_), @{ $self->{category_hash}{$file} || [] };
 
   return $self->call_method('document', 'read', 

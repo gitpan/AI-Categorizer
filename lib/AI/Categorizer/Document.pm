@@ -37,10 +37,6 @@ __PACKAGE__->valid_params
 		  type => SCALAR,
 		  default => 0,
 		  },
-   term_weighting  => {
-		       type => SCALAR,
-		       default => 'natural',
-		      },
    use_features => {
 		    type => HASHREF|UNDEF,
 		    default => undef,
@@ -73,7 +69,7 @@ sub new {
   $self->create_feature_vector;
 
   # Now we're done with all the content stuff
-  delete @{$self}{'content', 'content_weights', 'stopwords', 'term_weighting', 'use_features'};
+  delete @{$self}{'content', 'content_weights', 'stopwords', 'use_features'};
   
   return $self;
 }
@@ -106,18 +102,20 @@ sub create_feature_vector {
   my $content = $self->{content};
   my $weights = $self->{content_weights};
 
-  my %features;
+  $self->{features} = $self->create_delayed_object('features');
   while (my ($name, $data) = each %$content) {
     my $t = $self->tokenize($data);
     $self->stem_words($t);
     my $h = $self->vectorize(tokens => $t, weight => exists($weights->{$name}) ? $weights->{$name} : 1 );
-    @features{keys %$h} = values %$h;
+    $self->{features}->add($h);
   }
-  $self->{features} = $self->create_delayed_object('features', features => \%features);
 }
 
 sub is_in_category {
-  return $_[0]->{categories}->includes( $_[1] );
+  return (ref $_[1]
+	  ? $_[0]->{categories}->includes( $_[1] )
+	  : $_[0]->{categories}->includes_name( $_[1] ));
+    
 }
 
 sub tokenize {
@@ -188,21 +186,7 @@ sub _weigh_tokens {
 sub vectorize {
   my ($self, %args) = @_;
   my $tokens = $self->_filter_tokens($args{tokens});
-
-  return { map {( $_ => $args{weight})} @$tokens }
-    if $self->{term_weighting} eq 'boolean';
-
-  my $counts = $self->_weigh_tokens($tokens, $args{weight});
-
-  if ($self->{term_weighting} eq 'natural') {
-    # Nothing to do
-  } elsif ($self->{term_weighting} eq 'log') {
-    $_ = 1 + log($_) foreach values %$counts;
-  } else {
-    die "term_weighting must be one of 'natural', 'log', or 'boolean'";
-  }
-  
-  return $counts;
+  return $self->_weigh_tokens($tokens, $args{weight});
 }
 
 sub read {
@@ -244,7 +228,6 @@ AI::Categorizer::Document - Embodies a document
                                                             body => 1, ... },
                                        stopwords => \%skip_these_words,
                                        stemming => $string,
-                                       term_weighting => $string,
                                        front_bias => $float,
                                        use_features => $feature_vector,
                                       );
@@ -270,7 +253,15 @@ handle any kind of data.
 
 =item new(%parameters)
 
-Creates a new Document object.  Accepts the following parameters:
+Creates a new Document object.  Document objects are used during
+training (for the training documents), testing (for the test
+documents), and when categorizing new unseen documents in an
+application (for the unseen documents).  However, you'll typically
+only call C<new()> in the latter case, since the KnowledgeSet or
+Collection classes will create Document objects for you in the former
+cases.
+
+The C<new()> method accepts the following parameters:
 
 =over 4
 
@@ -303,15 +294,6 @@ Positive numbers indicate that words toward the beginning of the
 document should have higher weight than words toward the end of the
 document.  Negative numbers indicate the opposite.  A bias of 0
 indicates that no biasing should be done.
-
-=item term_weighting
-
-Specifies how word counts should be converted to feature vector
-values.  If C<term_weighting> is set to C<natural>, the word counts
-themselves will be used as the values.  C<boolean> indicates that each
-positive word count will be converted to 1 (or whatever the
-C<content_weight> for this section is).  C<log> indicates that the
-values will be set to C<1+log(count)>.
 
 =item categories
 

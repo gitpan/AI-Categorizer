@@ -1,34 +1,39 @@
 #!/usr/bin/perl
 
-# This script isn't an officially supported interface, but it may be
-# useful.  It creates a Categorizer and runs several of its method on
+# This script creates a Categorizer and runs several of its methods on
 # a corpus, reporting the results.
 #
 # Copyright 2002 Ken Williams, under the same license as the
 # AI::Categorizer distribution.
 
+
 use strict;
 use AI::Categorizer;
+my $HAVE_YAML = eval "use YAML; 1";
 
-my (%opt, %do_stage);
-parse_command_line(@ARGV);
+my ($opt, $do_stage, $outfile) = parse_command_line(@ARGV);
 @ARGV = grep !/^-\d$/, @ARGV;
 
-my $c = new AI::Categorizer(%opt);
+my $c = new AI::Categorizer(%$opt);
 
-%do_stage = map {$_, 1} 1..5 unless keys %do_stage;
+%$do_stage = map {$_, 1} 1..5 unless keys %$do_stage;
 
-run_section('scan_features',     1, \%do_stage);
-run_section('read_training_set', 2, \%do_stage);
-run_section('train',             3, \%do_stage);
-run_section('evaluate_test_set', 4, \%do_stage);
-if ($do_stage{5}) {
+run_section('scan_features',     1, $do_stage);
+run_section('read_training_set', 2, $do_stage);
+run_section('train',             3, $do_stage);
+run_section('evaluate_test_set', 4, $do_stage);
+if ($do_stage->{5}) {
   my $result = $c->stats_table;
   print $result;
-  if ( my $file = $c->progress_file ) {
+  if ( $outfile ) {
     local *FH;
-    open FH, "> $file-results.txt" or die "$file-results.txt: $!";
-    # Should also dump parameters here
+    open  FH, "> $outfile" or die "$outfile: $!";
+    print FH "# ", scalar(localtime), "\n";
+    if ($HAVE_YAML) {
+      print FH YAML::Dump($c->dump_parameters);
+    } else {
+      warn "More detailed parameter dumping is available if you install the YAML module from CPAN.\n";
+    }
     print FH $result;
     close FH;
   }
@@ -47,6 +52,7 @@ sub run_section {
 }
 
 sub parse_command_line {
+  my (%opt, %do_stage);
 
   while (@_) {
     if ($_[0] =~ /^-(\d+)$/) {
@@ -54,10 +60,9 @@ sub parse_command_line {
       $do_stage{$1} = 1;
       
     } elsif ( $_[0] eq '--config_file' ) {
+      die "--config_file requires the YAML module from CPAN to be installed.\n" unless $HAVE_YAML;
       shift;
       my $file = shift;
-      eval {require YAML; 1}
-	or die "--config_file requires the YAML Perl module to be installed.\n";
       my $href = YAML::LoadFile($file);
       @opt{keys %$href} = values %$href;
       
@@ -79,4 +84,11 @@ sub parse_command_line {
       $opt{$k} = $v;
     }
   }
+
+  my $outfile;
+  unless ($outfile = delete $opt{outfile}) {
+    $outfile = $opt{progress_file} ? "$opt{progress_file}-results.txt" : "results.txt";
+  }
+
+  return (\%opt, \%do_stage, $outfile);
 }
