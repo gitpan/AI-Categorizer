@@ -42,6 +42,9 @@ DESCRIPTION
     provides an umbrella class for high-level operations, or you may use the
     interfaces of the individual classes in the framework.
 
+    A simple sample script that reads a training corpus, trains a categorizer,
+    and tests the categorizer on a test corpus, is distributed as eg/demo.pl .
+
     Disclaimer: the results of any of the machine learning algorithms are far
     from infallible (close to fallible?). Categorization of documents is often a
     difficult task even for humans well-trained in the particular domain of
@@ -246,13 +249,6 @@ METHODS
             "$data_root/training", "test_set" to "$data_root/test", and
             "category_file" (used by some of the Collection classes) to
             "$data_root/cats.txt".
-
-        stopword_file
-            Specifies a file containing a list of "stopwords", which are words
-            that should automatically be disregarded when scanning/reading
-            documents. The file should contain one word per line. The file will
-            be parsed and then fed as the "stopwords" parameter to the
-            KnowledgeSet "new()" method.
 
     learner()
         Returns the Learner object associated with this Categorizer. Before

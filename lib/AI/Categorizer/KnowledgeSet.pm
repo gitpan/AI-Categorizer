@@ -19,14 +19,16 @@ __PACKAGE__->valid_params
 		  type => ARRAYREF,
 		  default => [],
 		  callbacks => { 'all are Category objects' => 
-				 sub { ! grep !UNIVERSAL::isa($_, 'AI::Categorizer::Category'), @_ },
+				 sub { ! grep !UNIVERSAL::isa($_, 'AI::Categorizer::Category'),
+					 @{$_[0]} },
 			       },
 		 },
    documents  => {
 		  type => ARRAYREF,
 		  default => [],
 		  callbacks => { 'all are Document objects' => 
-				 sub { ! grep !UNIVERSAL::isa($_, 'AI::Categorizer::Document'), @_ },
+				 sub { ! grep !UNIVERSAL::isa($_, 'AI::Categorizer::Document'),
+					 @{$_[0]} },
 			       },
 		 },
    scan_first => {
@@ -78,11 +80,6 @@ sub new {
   if ($args{tfidf_weighting}) {
     @args{'term_weighting', 'collection_weighting', 'normalize_weighting'} = split '', $args{tfidf_weighting};
     delete $args{tfidf_weighting};
-  }
-
-  # Optimize so every document doesn't have to convert the stopword list to a hash
-  if ($args{stopwords} and UNIVERSAL::isa($args{stopwords}, 'ARRAY')) {
-    $args{stopwords} = { map {+$_ => 1} @{ $args{stopwords} } };
   }
 
   my $self = $pkg->SUPER::new(%args);
