@@ -1,5 +1,23 @@
 Revision history for Perl extension AI::Categorizer.
 
+ - Added a ChiSquared feature selection class. [Francois Paradis]
+
+ - Changed the web locations of the reuters-21578 corpus that
+   eg/demo.pl uses, since the location it referenced previously has
+   gone away.
+
+ - The building & installing process now uses Module::Build rather
+   than ExtUtils::MakeMaker.
+
+ - When the features_kept mechanism was used to explicitly state the
+   features to use, and the scan_first parameter was left as its
+   default value, the features_kept mechanism would silently fail to
+   do anything.  This has now been fixed. [Spotted by Arnaud Gaudinat]
+
+ - Recent versions of Weka have changed the name of the SVM class, so
+   I've updated it in our test (t/03-weka.t) of the Weka wrapper
+   too. [Sebastien Aperghis-Tramoni]
+
 0.07  Tue May  6 16:15:04 CDT 2003
 
  - Oops - eg/demo.pl and t/15-knowledge_set.t didn't make it into the

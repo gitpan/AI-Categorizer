@@ -23,8 +23,9 @@ my $build = new Module::Build
 		  Algorithm::NaiveBayes => 0,
 		 },
    build_requires => {
-		      Module::Build     => 0.15,
+		      Module::Build     => 0.20,
 		     },
+   create_makefile_pl => 'passthrough',
   );
 
 my $categorizer = File::Spec->catfile('eg', 'categorizer');
@@ -33,6 +34,8 @@ if ($build->y_n("Do you want to install the $categorizer script to $Config{insta
 }
 
 
+$build->create_build_script;
+
 {
   my $path = $build->prompt
     (
@@ -40,15 +43,5 @@ if ($build->y_n("Do you want to install the $categorizer script to $Config{insta
      "to the 'weka.jar' file, or '-' to search CLASSPATH, or '!' to skip:",
      '!'
     );
-  
-  if ($path eq '!') {
-    unlink "classpath" if -e "classpath";
-  } else {
-    local *FH;
-    open FH, "> classpath" or die "Can't create classpath: $!";
-    print FH $path;
-    close FH;
-  }
+  $build->notes(classpath => $path eq '!' ? undef : $path);
 }
-
-$build->create_build_script;
