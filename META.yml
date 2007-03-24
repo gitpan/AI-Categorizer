@@ -1,6 +1,6 @@
 ---
 name: AI-Categorizer
-version: 0.08
+version: 0.09
 author:
   - 'Ken Williams <ken@mathforum.org>'
   - |-
@@ -30,7 +30,7 @@ recommends:
 provides:
   AI::Categorizer:
     file: lib/AI/Categorizer.pm
-    version: 0.08
+    version: 0.09
   AI::Categorizer::Category:
     file: lib/AI/Categorizer/Category.pm
   AI::Categorizer::Collection:
@@ -98,7 +98,7 @@ provides:
     file: lib/AI/Categorizer/Storable.pm
   AI::Categorizer::Util:
     file: lib/AI/Categorizer/Util.pm
-generated_by: Module::Build version 0.2805
+generated_by: Module::Build version 0.2806
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.2.html
   version: 1.2
